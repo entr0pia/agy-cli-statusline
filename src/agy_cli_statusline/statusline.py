@@ -14,6 +14,26 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stdin, "reconfigure"):
     sys.stdin.reconfigure(encoding="utf-8")
 
+# ANSI Theme Colors
+COLOR_RESET = "\033[0m"
+COLOR_THEME = "\033[1;96m"   # High-contrast Theme Cyan (高亮主题青色)
+COLOR_NUM   = "\033[1;97m"   # High-contrast Bright White (数值常规高亮)
+COLOR_YELLOW = "\033[1;93m"  # High-contrast Bright Yellow (达到20% / 剩余50% 告警)
+COLOR_RED   = "\033[1;91m"   # High-contrast Bright Red (达到50% / 剩余20% 危险)
+ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+
+
+if sys.platform == "win32":
+    try:
+        kernel32 = ctypes.windll.kernel32
+        hOut = kernel32.GetStdHandle(-11)
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hOut, ctypes.byref(mode)):
+            mode.value |= 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            kernel32.SetConsoleMode(hOut, mode)
+    except Exception:
+        pass
+
 def get_terminal_width(payload=None):
     if payload and isinstance(payload, dict):
         tw = payload.get("terminal_width")
@@ -47,14 +67,16 @@ def get_terminal_width(payload=None):
     return shutil.get_terminal_size((80, 20)).columns
 
 def get_display_width(text):
+    clean_text = ANSI_ESCAPE_RE.sub('', text)
     width = 0
-    for ch in text:
+    for ch in clean_text:
         eaw = unicodedata.east_asian_width(ch)
         if eaw in ('F', 'W'):
             width += 2
         else:
             width += 1
     return width
+
 
 def format_tokens(num):
     if not num:
@@ -64,6 +86,20 @@ def format_tokens(num):
     elif num >= 1_000:
         return f"{num / 1_000:.1f}k"
     return str(num)
+
+def format_context(tokens, pct):
+    tok_str = format_tokens(tokens)
+    if pct is not None:
+        # Context 达到 20% 黄色高亮、达到 50% 红色高亮
+        if pct >= 50.0:
+            val_color = COLOR_RED
+        elif pct >= 20.0:
+            val_color = COLOR_YELLOW
+        else:
+            val_color = COLOR_NUM
+        return f"Context: {val_color}{tok_str} ({pct:.1f}%){COLOR_RESET}"
+    return f"Context: {COLOR_NUM}{tok_str}{COLOR_RESET}"
+
 
 def extract_effort(payload, raw_model):
     # 1. Direct effort field from payload or model
@@ -145,24 +181,71 @@ def extract_quota(payload, raw_model):
     if not bucket or not isinstance(bucket, dict):
         return None
 
+    rem = None
+    val_str = None
+
     if "remaining_fraction" in bucket:
         rem = float(bucket["remaining_fraction"]) * 100.0
         if rem >= 99.995:
-            return "Quota: 100%"
+            val_str = "100%"
         elif rem <= 0.005:
-            return "Quota: 0%"
+            val_str = "0%"
         else:
-            return f"Quota: {rem:.2f}%"
+            val_str = f"{rem:.2f}%"
     elif "remaining_percentage" in bucket:
         rem = float(bucket["remaining_percentage"])
-        return f"Quota: {rem:.2f}%" if rem < 100 else "Quota: 100%"
+        val_str = f"{rem:.2f}%" if rem < 100 else "100%"
     elif "used_percentage" in bucket:
         rem = 100.0 - float(bucket["used_percentage"])
-        return f"Quota: {rem:.2f}%" if rem < 100 else "Quota: 100%"
+        val_str = f"{rem:.2f}%" if rem < 100 else "100%"
     elif "credits_remaining" in bucket and "credits_total" in bucket:
-        return f"Quota: {bucket['credits_remaining']}/{bucket['credits_total']}"
+        c_rem = bucket["credits_remaining"]
+        c_tot = bucket["credits_total"]
+        if c_tot > 0:
+            rem = (float(c_rem) / float(c_tot)) * 100.0
+        val_str = f"{c_rem}/{c_tot}"
 
-    return None
+    if not val_str:
+        return None
+
+    # Quota 剩余 50% 黄色，剩余 20% 红色
+    if rem is not None:
+        if rem <= 20.0:
+            color = COLOR_RED
+        elif rem <= 50.0:
+            color = COLOR_YELLOW
+        else:
+            color = COLOR_NUM
+    else:
+        color = COLOR_NUM
+
+    return f"Quota: {color}{val_str}{COLOR_RESET}"
+
+
+def extract_execution_mode(payload):
+    mode = (
+        payload.get("execution_mode")
+        or payload.get("cycle_mode")
+        or payload.get("agent_mode")
+    )
+    if not mode:
+        try:
+            settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+            if settings_path.exists():
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    settings = json.load(f)
+                    mode = settings.get("execution_mode") or settings.get("agentMode")
+        except Exception:
+            pass
+
+    if not mode:
+        return None
+
+    mode_str = str(mode).strip()
+    if not mode_str or mode_str.lower() in ("default", "none"):
+        return None
+
+    return "-".join(part.capitalize() for part in mode_str.replace("_", "-").split("-"))
 
 def main():
     try:
@@ -215,24 +298,38 @@ def main():
         else:
             parts.append(f"[{cleaned_model}]")
 
-        token_str = f"Context: {format_tokens(tokens)}"
-        if pct is not None:
-            token_str += f" ({pct:.1f}%)"
+        token_str = format_context(tokens, pct)
         parts.append(token_str)
+
 
         quota_str = extract_quota(payload, raw_model)
         if quota_str:
             parts.append(quota_str)
 
-        text = " | ".join(parts)
+        right_text = " | ".join(parts)
+        mode = extract_execution_mode(payload)
+        left_text = f"{COLOR_THEME}[{mode}]{COLOR_RESET}" if mode else ""
 
         term_width = get_terminal_width(payload)
-        disp_width = get_display_width(text)
-        padding = max(0, term_width - disp_width - 1)
+        right_width = get_display_width(right_text)
 
-        print(" " * padding + text)
+        if left_text:
+            left_width = get_display_width(left_text)
+            gap = term_width - left_width - right_width - 1
+            if gap >= 1:
+                print(f"{left_text}{' ' * gap}{right_text}")
+            else:
+                combined = f"{left_text} | {right_text}"
+                combined_width = get_display_width(combined)
+                padding = max(0, term_width - combined_width - 1)
+                print(" " * padding + combined)
+        else:
+            padding = max(0, term_width - right_width - 1)
+            print(" " * padding + right_text)
+
     except Exception:
         pass
+
 
 if __name__ == "__main__":
     main()
