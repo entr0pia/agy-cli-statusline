@@ -85,3 +85,10 @@ After installation, your `~/.gemini/antigravity-cli/settings.json` is updated wi
 ```
 
 Restart `agy` in your terminal to see the new statusline in action!
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+

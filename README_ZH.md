@@ -69,3 +69,10 @@ uvx --from . agy-cli-statusline --uninstall
 ```
 
 重新启动 `agy` 即可看到新状态栏生效。
+
+---
+
+## 📄 开源协议
+
+本项目基于 [MIT License](LICENSE) 协议开源。
+
