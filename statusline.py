@@ -1,0 +1,238 @@
+# -*- coding: utf-8 -*-
+import sys
+import os
+import json
+import re
+import shutil
+import ctypes
+import unicodedata
+from pathlib import Path
+
+# Ensure UTF-8 I/O on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8")
+
+def get_terminal_width(payload=None):
+    if payload and isinstance(payload, dict):
+        tw = payload.get("terminal_width")
+        if tw and isinstance(tw, int) and tw > 0:
+            return tw
+
+    cols = os.environ.get("COLUMNS")
+    if cols and cols.isdigit():
+        return int(cols)
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        for handle_id in [-12, -11]:
+            handle = kernel32.GetStdHandle(handle_id)
+            csbi = ctypes.create_string_buffer(22)
+            if kernel32.GetConsoleScreenBufferInfo(handle, csbi):
+                import struct
+                (_, _, _, _, _, left, _, right, _, _, _) = struct.unpack("hhhhHhhhhhh", csbi.raw)
+                width = right - left + 1
+                if width > 0:
+                    return width
+    except Exception:
+        pass
+
+    try:
+        with open("CONOUT$", "w") as f:
+            return os.get_terminal_size(f.fileno()).columns
+    except Exception:
+        pass
+
+    return shutil.get_terminal_size((80, 20)).columns
+
+def get_display_width(text):
+    width = 0
+    for ch in text:
+        eaw = unicodedata.east_asian_width(ch)
+        if eaw in ('F', 'W'):
+            width += 2
+        else:
+            width += 1
+    return width
+
+def format_tokens(num):
+    if not num:
+        return "0"
+    if num >= 1_000_000:
+        return f"{num / 1_000_000:.1f}M"
+    elif num >= 1_000:
+        return f"{num / 1_000:.1f}k"
+    return str(num)
+
+def extract_effort(payload, raw_model):
+    # 1. Direct effort field from payload or model
+    model_obj = payload.get("model", {}) if isinstance(payload.get("model"), dict) else {}
+    effort = (
+        payload.get("effort")
+        or payload.get("reasoning_effort")
+        or model_obj.get("effort")
+        or model_obj.get("reasoning_effort")
+    )
+    if effort:
+        return str(effort).capitalize()
+
+    # 2. Extract from model name string, e.g. "Gemini 3.8 Flash (High)"
+    if raw_model:
+        m = re.search(r'\((low|medium|high|xhigh|max)\)', raw_model, re.IGNORECASE)
+        if m:
+            return m.group(1).capitalize()
+
+    # 3. Environment variable
+    env_effort = os.environ.get("AGY_EFFORT") or os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
+    if env_effort:
+        return env_effort.capitalize()
+
+    # 4. Fallback settings.json
+    try:
+        settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+        if settings_path.exists():
+            with open(settings_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+                s_model = settings.get("model", "")
+                m = re.search(r'\((low|medium|high|xhigh|max)\)', s_model, re.IGNORECASE)
+                if m:
+                    return m.group(1).capitalize()
+                if settings.get("effort"):
+                    return str(settings["effort"]).capitalize()
+    except Exception:
+        pass
+
+    return "High"
+
+def select_quota_bucket(quota_dict, model_name):
+    if not quota_dict or not isinstance(quota_dict, dict):
+        return None
+
+    model_lower = (model_name or "").lower()
+    is_gemini = "gemini" in model_lower
+    is_3p = any(k in model_lower for k in ["claude", "opus", "sonnet", "gpt", "openai"])
+
+    # Match prioritized quota buckets according to model family
+    if is_gemini:
+        candidates = ["gemini-5h", "gemini", "gemini-weekly"]
+    elif is_3p:
+        candidates = ["3p-5h", "3p", "3p-weekly", "claude-5h", "claude"]
+    else:
+        candidates = ["gemini-5h", "3p-5h", "default"]
+
+    for key in candidates:
+        if key in quota_dict and isinstance(quota_dict[key], dict):
+            return quota_dict[key]
+
+    # Fuzzy match with "5h" prioritized for sliding window
+    for k, v in quota_dict.items():
+        if isinstance(v, dict) and "5h" in k:
+            return v
+
+    for v in quota_dict.values():
+        if isinstance(v, dict):
+            return v
+
+    return None
+
+def extract_quota(payload, raw_model):
+    quota_data = payload.get("quota")
+    if not quota_data:
+        return None
+
+    bucket = select_quota_bucket(quota_data, raw_model)
+    if not bucket or not isinstance(bucket, dict):
+        return None
+
+    if "remaining_fraction" in bucket:
+        rem = float(bucket["remaining_fraction"]) * 100.0
+        if rem >= 99.995:
+            return "Quota: 100%"
+        elif rem <= 0.005:
+            return "Quota: 0%"
+        else:
+            return f"Quota: {rem:.2f}%"
+    elif "remaining_percentage" in bucket:
+        rem = float(bucket["remaining_percentage"])
+        return f"Quota: {rem:.2f}%" if rem < 100 else "Quota: 100%"
+    elif "used_percentage" in bucket:
+        rem = 100.0 - float(bucket["used_percentage"])
+        return f"Quota: {rem:.2f}%" if rem < 100 else "Quota: 100%"
+    elif "credits_remaining" in bucket and "credits_total" in bucket:
+        return f"Quota: {bucket['credits_remaining']}/{bucket['credits_total']}"
+
+    return None
+
+def main():
+    try:
+        raw_input = sys.stdin.read().strip()
+
+        # Debug record
+        try:
+            dbg_file = Path.home() / ".gemini" / "antigravity-cli" / "last_statusline_payload.json"
+            with open(dbg_file, "w", encoding="utf-8") as f:
+                f.write(raw_input)
+        except Exception:
+            pass
+
+        payload = {}
+        if raw_input:
+            payload = json.loads(raw_input)
+
+        ctx = payload.get("context_window", {})
+        tokens = ctx.get("total_input_tokens") or ctx.get("input_tokens") or 0
+        pct = ctx.get("used_percentage")
+        if pct is None and ctx.get("remaining_percentage") is not None:
+            pct = 100.0 - float(ctx["remaining_percentage"])
+
+        model_obj = payload.get("model", {})
+        raw_model = ""
+        if isinstance(model_obj, dict):
+            raw_model = model_obj.get("display_name") or model_obj.get("name") or model_obj.get("id") or ""
+        elif model_obj:
+            raw_model = str(model_obj)
+
+        if not raw_model:
+            try:
+                settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+                if settings_path.exists():
+                    with open(settings_path, "r", encoding="utf-8") as f:
+                        settings = json.load(f)
+                        raw_model = settings.get("model", "")
+            except Exception:
+                pass
+
+        effort = extract_effort(payload, raw_model)
+
+        cleaned_model = re.sub(r'\s*\((low|medium|high|xhigh|max)\)', '', raw_model, flags=re.IGNORECASE).strip()
+        if not cleaned_model:
+            cleaned_model = "Gemini 3.8 Flash"
+
+        parts = []
+        if effort:
+            parts.append(f"[{cleaned_model} · {effort}]")
+        else:
+            parts.append(f"[{cleaned_model}]")
+
+        token_str = f"Context: {format_tokens(tokens)}"
+        if pct is not None:
+            token_str += f" ({pct:.1f}%)"
+        parts.append(token_str)
+
+        quota_str = extract_quota(payload, raw_model)
+        if quota_str:
+            parts.append(quota_str)
+
+        text = " | ".join(parts)
+
+        term_width = get_terminal_width(payload)
+        disp_width = get_display_width(text)
+        padding = max(0, term_width - disp_width - 1)
+
+        print(" " * padding + text)
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    main()
