@@ -59,7 +59,7 @@ def read_source_statusline() -> str:
         return fallback.read_text(encoding="utf-8")
 
 
-def install(agy_dir: Path | None = None, dry_run: bool = False) -> bool:
+def install(agy_dir: Path | None = None, dry_run: bool = False, debug: bool | None = None) -> bool:
     """Install statusline script and initialize settings.json configuration."""
     base = agy_dir or get_agy_dir()
     target_script = get_target_script_path(base)
@@ -90,11 +90,20 @@ def install(agy_dir: Path | None = None, dry_run: bool = False) -> bool:
                 print(f"[✓] Backup created at: {bak}")
             settings = {}
 
+    existing_statusline = settings.get("statusLine", {})
+    if debug is not None:
+        debug_val = debug
+    elif isinstance(existing_statusline, dict) and "debug" in existing_statusline:
+        debug_val = bool(existing_statusline["debug"])
+    else:
+        debug_val = False
+
     command = get_python_command(target_script)
     status_line_config = {
         "type": "command",
         "command": command,
         "enabled": True,
+        "debug": debug_val,
     }
 
     settings["statusLine"] = status_line_config
@@ -181,6 +190,12 @@ def cli_main() -> None:
     # install subcommand
     install_parser = subparsers.add_parser("install", help="Install statusline script and update configuration (default)")
     install_parser.add_argument("--dry-run", action="store_true", help="Dry run without modifying files")
+    install_parser.add_argument(
+        "--debug",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable debug recording of statusline payload (default: False)",
+    )
 
     # uninstall subcommand
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove statusline configuration and script")
@@ -192,6 +207,12 @@ def cli_main() -> None:
 
     # Root flags
     parser.add_argument("--dry-run", action="store_true", help="Dry run without modifying files")
+    parser.add_argument(
+        "--debug",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable/disable debug recording of statusline payload (default: False)",
+    )
     parser.add_argument("--status", action="store_true", help="Check statusline installation and configuration status")
     parser.add_argument("--uninstall", action="store_true", help="Remove statusline configuration and script")
 
@@ -203,5 +224,5 @@ def cli_main() -> None:
         keep_script = getattr(args, "keep_script", False)
         uninstall(remove_script=not keep_script, dry_run=args.dry_run)
     else:
-        install(dry_run=args.dry_run)
+        install(dry_run=args.dry_run, debug=args.debug)
 

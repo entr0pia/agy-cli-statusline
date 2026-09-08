@@ -63,10 +63,13 @@ uvx --from . agy-cli-statusline --uninstall
   "statusLine": {
     "type": "command",
     "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/statusline.py",
-    "enabled": true
+    "enabled": true,
+    "debug": false
   }
 }
 ```
+
+> **调试模式**：将 `"debug": true`（或在安装时指定 `--debug` 参数，或配置环境变量 `AGY_STATUSLINE_DEBUG=1`）会把最近一次接收到的原始 payload 写入 `~/.gemini/antigravity-cli/last_statusline_payload.json` 便于排查。默认禁用调试文件写入以确保极致的终端刷新性能。
 
 重新启动 `agy` 即可看到新状态栏生效。
 

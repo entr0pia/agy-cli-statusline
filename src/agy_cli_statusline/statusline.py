@@ -3,8 +3,8 @@ import sys
 import os
 import json
 import re
-import shutil
 import ctypes
+import struct
 import unicodedata
 from pathlib import Path
 
@@ -20,7 +20,47 @@ COLOR_THEME = "\033[1;96m"   # High-contrast Theme Cyan (高亮主题青色)
 COLOR_NUM   = "\033[1;97m"   # High-contrast Bright White (数值常规高亮)
 COLOR_YELLOW = "\033[1;93m"  # High-contrast Bright Yellow (达到20% / 剩余50% 告警)
 COLOR_RED   = "\033[1;91m"   # High-contrast Bright Red (达到50% / 剩余20% 危险)
+
 ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+EFFORT_RE = re.compile(r'\((low|medium|high|xhigh|max)\)', re.IGNORECASE)
+EFFORT_CLEAN_RE = re.compile(r'\s*\((low|medium|high|xhigh|max)\)', re.IGNORECASE)
+
+_cached_settings = None
+
+
+def get_settings():
+    """Retrieve and cache settings.json contents for the current invocation."""
+    global _cached_settings
+    if _cached_settings is not None:
+        return _cached_settings
+    try:
+        env_dir = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.environ.get("AGY_CONFIG_DIR")
+        base = Path(env_dir) if env_dir else Path.home() / ".gemini" / "antigravity-cli"
+        settings_path = base / "settings.json"
+        if settings_path.exists():
+            with open(settings_path, "r", encoding="utf-8") as f:
+                _cached_settings = json.load(f)
+                return _cached_settings
+    except Exception:
+        pass
+    _cached_settings = {}
+    return _cached_settings
+
+
+def is_debug_enabled(settings=None):
+    """Check if debug logging is enabled via environment variable or settings.json."""
+    env_debug = os.environ.get("AGY_STATUSLINE_DEBUG", "").strip().lower()
+    if env_debug in ("1", "true", "yes", "on"):
+        return True
+    if settings is None:
+        settings = get_settings()
+    if isinstance(settings, dict):
+        sl_cfg = settings.get("statusLine")
+        if isinstance(sl_cfg, dict) and sl_cfg.get("debug"):
+            return True
+        if settings.get("debug"):
+            return True
+    return False
 
 
 if sys.platform == "win32":
@@ -50,7 +90,6 @@ def get_terminal_width(payload=None):
             handle = kernel32.GetStdHandle(handle_id)
             csbi = ctypes.create_string_buffer(22)
             if kernel32.GetConsoleScreenBufferInfo(handle, csbi):
-                import struct
                 (_, _, _, _, _, left, _, right, _, _, _) = struct.unpack("hhhhHhhhhhh", csbi.raw)
                 width = right - left + 1
                 if width > 0:
@@ -64,14 +103,22 @@ def get_terminal_width(payload=None):
     except Exception:
         pass
 
-    return shutil.get_terminal_size((80, 20)).columns
+    try:
+        return os.get_terminal_size().columns
+    except Exception:
+        pass
+
+    return 80
 
 def get_display_width(text):
     clean_text = ANSI_ESCAPE_RE.sub('', text)
+    if clean_text.isascii():
+        return len(clean_text)
     width = 0
     for ch in clean_text:
-        eaw = unicodedata.east_asian_width(ch)
-        if eaw in ('F', 'W'):
+        if ord(ch) < 128:
+            width += 1
+        elif unicodedata.east_asian_width(ch) in ('F', 'W'):
             width += 2
         else:
             width += 1
@@ -101,7 +148,7 @@ def format_context(tokens, pct):
     return f"Context: {COLOR_NUM}{tok_str}{COLOR_RESET}"
 
 
-def extract_effort(payload, raw_model):
+def extract_effort(payload, raw_model, settings=None):
     # 1. Direct effort field from payload or model
     model_obj = payload.get("model", {}) if isinstance(payload.get("model"), dict) else {}
     effort = (
@@ -115,7 +162,7 @@ def extract_effort(payload, raw_model):
 
     # 2. Extract from model name string, e.g. "Gemini 3.8 Flash (High)"
     if raw_model:
-        m = re.search(r'\((low|medium|high|xhigh|max)\)', raw_model, re.IGNORECASE)
+        m = EFFORT_RE.search(raw_model)
         if m:
             return m.group(1).capitalize()
 
@@ -125,19 +172,15 @@ def extract_effort(payload, raw_model):
         return env_effort.capitalize()
 
     # 4. Fallback settings.json
-    try:
-        settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
-        if settings_path.exists():
-            with open(settings_path, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-                s_model = settings.get("model", "")
-                m = re.search(r'\((low|medium|high|xhigh|max)\)', s_model, re.IGNORECASE)
-                if m:
-                    return m.group(1).capitalize()
-                if settings.get("effort"):
-                    return str(settings["effort"]).capitalize()
-    except Exception:
-        pass
+    if settings is None:
+        settings = get_settings()
+    if settings:
+        s_model = settings.get("model", "")
+        m = EFFORT_RE.search(s_model)
+        if m:
+            return m.group(1).capitalize()
+        if settings.get("effort"):
+            return str(settings["effort"]).capitalize()
 
     return "High"
 
@@ -222,21 +265,17 @@ def extract_quota(payload, raw_model):
     return f"Quota: {color}{val_str}{COLOR_RESET}"
 
 
-def extract_execution_mode(payload):
+def extract_execution_mode(payload, settings=None):
     mode = (
         payload.get("execution_mode")
         or payload.get("cycle_mode")
         or payload.get("agent_mode")
     )
     if not mode:
-        try:
-            settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
-            if settings_path.exists():
-                with open(settings_path, "r", encoding="utf-8") as f:
-                    settings = json.load(f)
-                    mode = settings.get("execution_mode") or settings.get("agentMode")
-        except Exception:
-            pass
+        if settings is None:
+            settings = get_settings()
+        if settings:
+            mode = settings.get("execution_mode") or settings.get("agentMode")
 
     if not mode:
         return None
@@ -250,14 +289,18 @@ def extract_execution_mode(payload):
 def main():
     try:
         raw_input = sys.stdin.read().strip()
+        settings = get_settings()
 
-        # Debug record
-        try:
-            dbg_file = Path.home() / ".gemini" / "antigravity-cli" / "last_statusline_payload.json"
-            with open(dbg_file, "w", encoding="utf-8") as f:
-                f.write(raw_input)
-        except Exception:
-            pass
+        # Debug record: only write when debug is explicitly enabled
+        if is_debug_enabled(settings):
+            try:
+                env_dir = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.environ.get("AGY_CONFIG_DIR")
+                base = Path(env_dir) if env_dir else Path.home() / ".gemini" / "antigravity-cli"
+                dbg_file = base / "last_statusline_payload.json"
+                with open(dbg_file, "w", encoding="utf-8") as f:
+                    f.write(raw_input)
+            except Exception:
+                pass
 
         payload = {}
         if raw_input:
@@ -276,19 +319,12 @@ def main():
         elif model_obj:
             raw_model = str(model_obj)
 
-        if not raw_model:
-            try:
-                settings_path = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
-                if settings_path.exists():
-                    with open(settings_path, "r", encoding="utf-8") as f:
-                        settings = json.load(f)
-                        raw_model = settings.get("model", "")
-            except Exception:
-                pass
+        if not raw_model and settings:
+            raw_model = settings.get("model", "")
 
-        effort = extract_effort(payload, raw_model)
+        effort = extract_effort(payload, raw_model, settings)
 
-        cleaned_model = re.sub(r'\s*\((low|medium|high|xhigh|max)\)', '', raw_model, flags=re.IGNORECASE).strip()
+        cleaned_model = EFFORT_CLEAN_RE.sub('', raw_model).strip()
         if not cleaned_model:
             cleaned_model = "Gemini 3.8 Flash"
 
@@ -301,13 +337,12 @@ def main():
         token_str = format_context(tokens, pct)
         parts.append(token_str)
 
-
         quota_str = extract_quota(payload, raw_model)
         if quota_str:
             parts.append(quota_str)
 
         right_text = " | ".join(parts)
-        mode = extract_execution_mode(payload)
+        mode = extract_execution_mode(payload, settings)
         left_text = f"{COLOR_THEME}[{mode}]{COLOR_RESET}" if mode else ""
 
         term_width = get_terminal_width(payload)

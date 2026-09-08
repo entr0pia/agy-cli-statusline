@@ -79,10 +79,13 @@ After installation, your `~/.gemini/antigravity-cli/settings.json` is updated wi
   "statusLine": {
     "type": "command",
     "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/statusline.py",
-    "enabled": true
+    "enabled": true,
+    "debug": false
   }
 }
 ```
+
+> **Debug Mode**: Setting `"debug": true` (or passing `--debug` during install, or setting environment variable `AGY_STATUSLINE_DEBUG=1`) will save the latest raw payload to `~/.gemini/antigravity-cli/last_statusline_payload.json` for troubleshooting. By default, debug writing is disabled to maximize rendering performance.
 
 Restart `agy` in your terminal to see the new statusline in action!
 
