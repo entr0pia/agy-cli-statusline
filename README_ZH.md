@@ -2,9 +2,9 @@
 
 [English](README.md) | 简体中文
 
-适用于 Google Antigravity CLI (`agy`) 的自定义状态栏（Statusline）一键安装与配置工具。
+适用于 Google Antigravity CLI (`agy`) 的自定义状态栏（Statusline）与终端标题（Title）一键安装与配置工具。
 
-能够自动将 `statusline.py` 脚本放置到用户的 `~/.gemini/antigravity-cli/scripts/` 目录，并自动初始化/更新 `~/.gemini/antigravity-cli/settings.json` 配置。
+能够自动将 `statusline.py` 与 `title.py` 脚本放置到用户的 `~/.gemini/antigravity-cli/scripts/` 目录，并自动初始化/更新 `~/.gemini/antigravity-cli/settings.json` 配置。
 
 ---
 
@@ -14,6 +14,9 @@
 - **智能阈值色彩警示**：
   - **Context 占用**：常规粗体亮白高亮；达到 **20%** 亮黄警示；达到 **50%** 亮红告警。
   - **Quota 剩余**：常规粗体亮白高亮；剩余不足 **50%** 亮黄警示；剩余不足 **20%** 亮红告警。
+- **实时终端标题集成**：
+  - 自动将终端窗口/标签页标题同步为 `<workspace>: <emoji> <state> [<task_count>]`（例如 `agy-cli-statusline: 🏃 working [2]`）。
+  - 支持 Agent 全生命周期状态 Emoji：`🚀 initializing`、`🤖 idle`、`🤔 thinking`、`🏃 working`、`🛠️ tool_use`。
 - **精准宽度自适应**：自动剥离 ANSI 转义颜色代码计算可见列宽，并兼容东亚宽字符，左右两端对齐分毫不差。
 - **免手动配置**：直接通过 `uvx` 运行，自动将脚本放入正确的目录并同步更新 `settings.json`。
 - **纯标准库实现**：脚本与安装工具均零外部依赖，极速执行。
@@ -37,8 +40,8 @@ uvx --from . agy-cli-statusline
 ```
 
 > 运行后会自动完成：
-> 1. 拷贝 `statusline.py` 到 `~/.gemini/antigravity-cli/scripts/statusline.py`
-> 2. 更新 `~/.gemini/antigravity-cli/settings.json` 中的 `statusLine` 配置项
+> 1. 拷贝 `statusline.py` 与 `title.py` 到 `~/.gemini/antigravity-cli/scripts/`
+> 2. 更新 `~/.gemini/antigravity-cli/settings.json` 中的 `statusLine` 与 `title` 配置项
 
 ### 2. 检查当前安装状态
 
@@ -65,13 +68,18 @@ uvx --from . agy-cli-statusline --uninstall
     "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/statusline.py",
     "enabled": true,
     "debug": false
+  },
+  "title": {
+    "type": "command",
+    "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/title.py",
+    "enabled": true
   }
 }
 ```
 
 > **调试模式**：将 `"debug": true`（或在安装时指定 `--debug` 参数，或配置环境变量 `AGY_STATUSLINE_DEBUG=1`）会把最近一次接收到的原始 payload 写入 `~/.gemini/antigravity-cli/last_statusline_payload.json` 便于排查。默认禁用调试文件写入以确保极致的终端刷新性能。
 
-重新启动 `agy` 即可看到新状态栏生效。
+重新启动 `agy` 即可看到新状态栏和终端标题生效。
 
 ---
 

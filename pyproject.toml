@@ -1,8 +1,8 @@
 [project]
 name = "agy-cli-statusline"
-version = "0.1.4"
+version = "0.1.5"
 
-description = "One-click installer and statusline manager for Google Antigravity CLI (agy)"
+description = "One-click installer and statusline/title manager for Google Antigravity CLI (agy)"
 readme = "README.md"
 license = "MIT"
 
