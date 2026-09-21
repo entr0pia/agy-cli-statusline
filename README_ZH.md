@@ -10,7 +10,10 @@
 
 ## ✨ 特性
 
-- **执行模式两端对齐**：左侧高亮标识当前会话执行模式（如 `[Accept-Edits]`、`[Planning]`、`[Fast]` 等），未匹配或默认模式自动隐藏，保持界面清爽。
+- **执行模式两端对齐**：左侧标识当前会话执行模式（如 `[Accept-Edits]`、`[Planning]`、`[Fast]` 等），未匹配或默认模式自动隐藏，保持界面清爽。
+- **智能动态主题配色与自定义取色**：
+  - **动态适配 `agy` 官方主题**：自动根据 `settings.json` 中的 `colorScheme` 匹配 Accent 色彩，原生支持 `tokyo night`（`#7aa2f7` 东京冰蓝）、`solarized dark`（`#2aa198` 青）、`solarized light`（`#268bd2` 蓝）、`light`（`#0969da` 浅底高对比深蓝）、`dark`（亮青）、`terminal`（终端原生青）与 `colorblind-friendly`（`#33b1ff` 天蓝）。
+  - **灵活自定义覆盖**：可在 `settings.json` 的 `statusLine` 中配置 `"themeColor": "#rrggbb"`（或颜色英文别名如 `"purple"`、`"cyan"`），亦可通过环境变量 `AGY_THEME_COLOR` 覆盖。
 - **智能阈值色彩警示**：
   - **Context 占用**：常规粗体亮白高亮；达到 **20%** 亮黄警示；达到 **50%** 亮红告警。
   - **Quota 剩余**：常规粗体亮白高亮；剩余不足 **50%** 亮黄警示；剩余不足 **20%** 亮红告警。
@@ -67,7 +70,8 @@ uvx --from . agy-cli-statusline --uninstall
     "type": "command",
     "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/statusline.py",
     "enabled": true,
-    "debug": false
+    "debug": false,
+    "themeColor": "#7aa2f7"
   },
   "title": {
     "type": "command",
@@ -77,6 +81,8 @@ uvx --from . agy-cli-statusline --uninstall
 }
 ```
 
+> **主题与自定义配色**：默认情况下，`statusline.py` 会自动检测并遵循您在 `settings.json` 中配置的 `colorScheme`（如 `"tokyo night"`、`"solarized dark"`、`"light"` 等）渲染对应官方强调色。您亦可在 `statusLine` 下显式添加 `"themeColor"`（如 16 进制颜色 `"#7aa2f7"` 或常用名称 `"purple"`、`"cyan"`）进行个性化强制覆盖。
+>
 > **调试模式**：将 `"debug": true`（或在安装时指定 `--debug` 参数，或配置环境变量 `AGY_STATUSLINE_DEBUG=1`）会把最近一次接收到的原始 payload 写入 `~/.gemini/antigravity-cli/last_statusline_payload.json` 便于排查。默认禁用调试文件写入以确保极致的终端刷新性能。
 
 重新启动 `agy` 即可看到新状态栏和终端标题生效。

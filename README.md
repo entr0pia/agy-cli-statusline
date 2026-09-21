@@ -11,8 +11,11 @@ It automatically places the custom `statusline.py` and `title.py` scripts into y
 ## ✨ Features
 
 - **Bilateral Screen-Adaptive Layout**: 
-  - **Left**: Displays the current execution mode (e.g., `[Accept-Edits]`, `[Planning]`, `[Fast]`) highlighted in bold cyan. Automatically hides when unmatched or set to `default`, keeping the interface clean.
+  - **Left**: Displays the current execution mode (e.g., `[Accept-Edits]`, `[Planning]`, `[Fast]`) styled with dynamic theme colors. Automatically hides when unmatched or set to `default`, keeping the interface clean.
   - **Right**: Displays active model info with reasoning effort (e.g., `[Gemini 3.8 Flash · High]`), Context token usage & percentage, and live Quota remaining percentage.
+- **Dynamic Theme Palette & Custom Colors**:
+  - **Auto-adapts to `agy`'s `colorScheme`**: Automatically matches accent colors for `tokyo night` (`#7aa2f7` Tokyo Blue), `solarized dark` (`#2aa198` Cyan), `solarized light` (`#268bd2` Blue), `light` (`#0969da` High-contrast Dark Blue), `dark` (Bright Cyan), `terminal` (Terminal Cyan), and `colorblind-friendly` (`#33b1ff` Sky Blue).
+  - **Customizable**: Override with `"themeColor": "#rrggbb"` (or named colors like `"purple"`, `"cyan"`) in `settings.json` `statusLine`, or set `AGY_THEME_COLOR`.
 - **Dynamic Warning Color Thresholds**:
   - **Context Usage**: Normal bold white; switches to **Bold Yellow** when usage reaches $\ge 20\%$; escalates to **Bold Red** when usage reaches $\ge 50\%$.
   - **Quota Remaining**: Normal bold white; switches to **Bold Yellow** when remaining falls $\le 50\%$; escalates to **Bold Red** when remaining falls $\le 20\%$.
@@ -83,7 +86,8 @@ After installation, your `~/.gemini/antigravity-cli/settings.json` is updated wi
     "type": "command",
     "command": "python C:/Users/<Username>/.gemini/antigravity-cli/scripts/statusline.py",
     "enabled": true,
-    "debug": false
+    "debug": false,
+    "themeColor": "#7aa2f7"
   },
   "title": {
     "type": "command",
@@ -93,6 +97,8 @@ After installation, your `~/.gemini/antigravity-cli/settings.json` is updated wi
 }
 ```
 
+> **Theme & Custom Colors**: By default, `statusline.py` automatically detects your `colorScheme` setting (e.g. `"tokyo night"`, `"solarized dark"`, `"light"`, `"dark"`) and renders in that theme's official accent color. You can optionally add `"themeColor"` (hex code like `"#7aa2f7"` or color name like `"purple"`, `"cyan"`) to override it.
+>
 > **Debug Mode**: Setting `"debug": true` (or passing `--debug` during install, or setting environment variable `AGY_STATUSLINE_DEBUG=1`) will save the latest raw payload to `~/.gemini/antigravity-cli/last_statusline_payload.json` for troubleshooting. By default, debug writing is disabled to maximize rendering performance.
 
 Restart `agy` in your terminal to see the new statusline and title in action!

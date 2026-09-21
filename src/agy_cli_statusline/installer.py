@@ -128,6 +128,10 @@ def install(agy_dir: Path | None = None, dry_run: bool = False, debug: bool | No
         "enabled": True,
         "debug": debug_val,
     }
+    if isinstance(existing_statusline, dict):
+        for k in ("themeColor", "color"):
+            if k in existing_statusline:
+                status_line_config[k] = existing_statusline[k]
     settings["statusLine"] = status_line_config
 
     title_command = get_python_command(target_title)

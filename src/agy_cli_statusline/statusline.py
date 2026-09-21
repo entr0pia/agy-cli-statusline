@@ -16,10 +16,125 @@ if hasattr(sys.stdin, "reconfigure"):
 
 # ANSI Theme Colors
 COLOR_RESET = "\033[0m"
-COLOR_THEME = "\033[1;96m"   # High-contrast Theme Cyan (高亮主题青色)
-COLOR_NUM   = "\033[1;97m"   # High-contrast Bright White (数值常规高亮)
-COLOR_YELLOW = "\033[1;93m"  # High-contrast Bright Yellow (达到20% / 剩余50% 告警)
-COLOR_RED   = "\033[1;91m"   # High-contrast Bright Red (达到50% / 剩余20% 危险)
+COLOR_THEME_DEFAULT = "\033[1;96m"  # High-contrast Bright Cyan default (默认高亮青色)
+COLOR_NUM   = "\033[1;97m"          # High-contrast Bright White (数值常规高亮)
+COLOR_YELLOW = "\033[1;93m"         # High-contrast Bright Yellow (达到20% / 剩余50% 告警)
+COLOR_RED   = "\033[1;91m"          # High-contrast Bright Red (达到50% / 剩余20% 危险)
+
+# Standard Named ANSI Colors (Bold)
+NAMED_ANSI_COLORS = {
+    "cyan": "\033[1;96m",
+    "blue": "\033[1;94m",
+    "purple": "\033[1;95m",
+    "magenta": "\033[1;95m",
+    "green": "\033[1;92m",
+    "yellow": "\033[1;93m",
+    "red": "\033[1;91m",
+    "white": "\033[1;97m",
+    "gray": "\033[1;90m",
+    "grey": "\033[1;90m",
+}
+
+# agy Official Theme Accent Palettes
+THEME_PALETTES = {
+    "tokyo night": "\033[1;38;2;122;162;247m",          # #7aa2f7 Tokyo Blue
+    "tokyonight": "\033[1;38;2;122;162;247m",
+    "solarized dark": "\033[1;38;2;42;161;152m",        # #2aa198 Solarized Cyan
+    "solarized-dark": "\033[1;38;2;42;161;152m",
+    "solarized light": "\033[1;38;2;38;139;210m",       # #268bd2 Solarized Blue
+    "solarized-light": "\033[1;38;2;38;139;210m",
+    "light": "\033[1;38;2;9;105;218m",                 # #0969da High-contrast Dark Blue
+    "dark": "\033[1;96m",                               # Bright Cyan
+    "terminal": "\033[1;36m",                           # Terminal Cyan
+    "colorblind-friendly dark": "\033[1;38;2;51;177;255m",   # #33b1ff Sky Blue
+    "colorblind-friendly light": "\033[1;38;2;51;177;255m",  # #33b1ff Sky Blue
+    "colorblind-friendly": "\033[1;38;2;51;177;255m",
+}
+
+
+def hex_to_ansi(hex_str):
+    """Convert hex string (e.g. #7aa2f7 or 7aa2f7) to 24-bit TrueColor ANSI escape."""
+    if not hex_str or not isinstance(hex_str, str):
+        return None
+    s = hex_str.strip().lstrip("#")
+    if len(s) == 3:
+        s = "".join(c * 2 for c in s)
+    if len(s) != 6:
+        return None
+    try:
+        r = int(s[0:2], 16)
+        g = int(s[2:4], 16)
+        b = int(s[4:6], 16)
+        return f"\033[1;38;2;{r};{g};{b}m"
+    except ValueError:
+        return None
+
+
+def parse_color_code(val):
+    """Parse color from user input (hex, named color, or raw ANSI)."""
+    if not val or not isinstance(val, str):
+        return None
+    cleaned = val.strip()
+    if not cleaned:
+        return None
+    # 1. Raw ANSI code
+    if "\033" in cleaned or "\x1b" in cleaned:
+        return cleaned
+    # 2. Named color
+    lower = cleaned.lower()
+    if lower in NAMED_ANSI_COLORS:
+        return NAMED_ANSI_COLORS[lower]
+    # 3. Hex code
+    hex_ansi = hex_to_ansi(cleaned)
+    if hex_ansi:
+        return hex_ansi
+    return None
+
+
+def resolve_theme_color(payload=None, settings=None):
+    """Resolve the statusline theme color dynamically according to custom config, colorScheme, or default."""
+    if settings is None:
+        settings = get_settings()
+
+    # 1. Check settings.json statusLine override
+    if isinstance(settings, dict):
+        sl = settings.get("statusLine")
+        if isinstance(sl, dict):
+            custom_color = sl.get("themeColor") or sl.get("color")
+            parsed = parse_color_code(custom_color)
+            if parsed:
+                return parsed
+
+    # 2. Check environment variables
+    env_color = os.environ.get("AGY_THEME_COLOR") or os.environ.get("AGY_STATUSLINE_COLOR")
+    parsed_env = parse_color_code(env_color)
+    if parsed_env:
+        return parsed_env
+
+    # 3. Check payload for theme/colorScheme (forward compatibility)
+    if isinstance(payload, dict):
+        p_scheme = payload.get("colorScheme") or payload.get("theme") or payload.get("color_scheme")
+        if p_scheme and isinstance(p_scheme, str):
+            p_norm = p_scheme.strip().lower()
+            if p_norm in THEME_PALETTES:
+                return THEME_PALETTES[p_norm]
+            p_key = p_norm.replace("-", " ")
+            if p_key in THEME_PALETTES:
+                return THEME_PALETTES[p_key]
+
+    # 4. Check agy colorScheme in settings.json
+    if isinstance(settings, dict):
+        scheme = settings.get("colorScheme")
+        if scheme and isinstance(scheme, str):
+            norm_scheme = scheme.strip().lower()
+            if norm_scheme in THEME_PALETTES:
+                return THEME_PALETTES[norm_scheme]
+            key = norm_scheme.replace("-", " ")
+            if key in THEME_PALETTES:
+                return THEME_PALETTES[key]
+
+    return COLOR_THEME_DEFAULT
+
 
 ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 EFFORT_RE = re.compile(r'\((low|medium|high|xhigh|max)\)', re.IGNORECASE)
@@ -343,7 +458,8 @@ def main():
 
         right_text = " | ".join(parts)
         mode = extract_execution_mode(payload, settings)
-        left_text = f"{COLOR_THEME}[{mode}]{COLOR_RESET}" if mode else ""
+        theme_color = resolve_theme_color(payload, settings)
+        left_text = f"{theme_color}[{mode}]{COLOR_RESET}" if mode else ""
 
         term_width = get_terminal_width(payload)
         right_width = get_display_width(right_text)
