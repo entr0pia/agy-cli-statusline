@@ -10,7 +10,7 @@ It automatically copies and synchronizes custom `statusline.py` and `title.py` s
 - **Bilateral Statusline**: Left-aligned execution mode (e.g. `[Accept-Edits]`, `[Planning]`, `[Fast]`) and right-aligned model info (`[Gemini 3.8 Flash · High]`), context token usage, and quota availability.
 - **Dynamic Theme Palette & Custom Colors**: Automatically adapts execution mode accent color to `colorScheme` (`tokyo night`, `solarized dark/light`, `light`, `dark`, `terminal`, `colorblind-friendly`), or user-defined `statusLine.themeColor` hex/name.
 - **Dynamic Warning Thresholds**: Context token usage escalates to bold yellow at $\ge 20\%$ and bold red at $\ge 50\%$; remaining quota drops to bold yellow at $\le 50\%$ and bold red at $\le 20\%$.
-- **Terminal Title Sync**: Real-time terminal title formatted as `<workspace>: <emoji> <state> [<task_count>]` across agent lifecycle states (`initializing`, `idle`, `thinking`, `working`, `tool_use`).
+- **Terminal Title Sync**: Real-time terminal title formatted as `<workspace>: <emoji> <state> [<task_count>]` across agent lifecycle states (`idle`, `working`, `tool_use`, `reviewing`, `initializing`, `authenticating`, `merging`, `error`).
 - **Precision Alignment**: Accurate visible column width calculation handling East Asian (CJK) characters and ANSI escape sequences.
 - **Zero Dependencies**: Pure Python standard library only. No external packages required at runtime or installation.
 
@@ -154,11 +154,15 @@ Both `statusline.py` and `title.py` are executed by `agy` via standard input pip
   - Path basename extracted using pure string slice `rfind` operations rather than `os.path.normpath` or regex.
   - Direct output via `sys.stdout.write` instead of `print` to minimize overhead on rapid terminal refreshes.
 - **State Mappings**:
-  - `initializing` $\rightarrow$ `🚀`
   - `idle` $\rightarrow$ `🤖`
-  - `thinking` $\rightarrow$ `🤔`
   - `working` $\rightarrow$ `🏃`
   - `tool_use` $\rightarrow$ `🛠️`
+  - `reviewing` $\rightarrow$ `👀`
+  - `initializing` $\rightarrow$ `🚀`
+  - `authenticating` $\rightarrow$ `🔐`
+  - `merging` $\rightarrow$ `🔀`
+  - `error` $\rightarrow$ `🚨`
+  - `thinking` $\rightarrow$ `🤔` *(retained for compatibility)*
 
 ---
 

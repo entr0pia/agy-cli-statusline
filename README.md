@@ -21,7 +21,7 @@ It automatically places the custom `statusline.py` and `title.py` scripts into y
   - **Quota Remaining**: Normal bold white; switches to **Bold Yellow** when remaining falls $\le 50\%$; escalates to **Bold Red** when remaining falls $\le 20\%$.
 - **Real-Time Terminal Title Integration**:
   - Automatically formats the window/tab title as `<workspace>: <emoji> <state> [<task_count>]` (e.g. `agy-cli-statusline: 🏃 working [2]`).
-  - Native agent lifecycle emojis: `🚀 initializing`, `🤖 idle`, `🤔 thinking`, `🏃 working`, `🛠️ tool_use`.
+  - Native agent lifecycle emojis: `🚀 initializing`, `🤖 idle`, `🤔 thinking`, `🏃 working`, `🛠️ tool_use`, `👀 reviewing`, `🔐 authenticating`, `🔀 merging`, `🚨 error`.
 - **Accurate Display Width Calculation**: Automatically strips ANSI escape sequences before calculating layout width and handles East Asian Wide characters (e.g., CJK) seamlessly, guaranteeing pixel-perfect alignment.
 - **Zero Configuration & Zero Dependencies**: Built purely on the Python standard library. Runs instantly without downloading third-party pip packages.
 - **Effortless `uvx` Execution**: Run directly via `uvx` without manual wheel building or packaging.

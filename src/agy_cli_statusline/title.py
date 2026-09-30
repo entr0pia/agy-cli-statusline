@@ -9,11 +9,15 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 STATE_EMOJIS = {
-    "initializing": "🚀",
     "idle": "🤖",
-    "thinking": "🤔",
     "working": "🏃",
     "tool_use": "🛠️",
+    "reviewing": "👀",
+    "initializing": "🚀",
+    "authenticating": "🔐",
+    "merging": "🔀",
+    "error": "🚨",
+    "thinking": "🤔",
 }
 DEFAULT_EMOJI = "🤖"
 

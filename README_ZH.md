@@ -19,7 +19,7 @@
   - **Quota 剩余**：常规粗体亮白高亮；剩余不足 **50%** 亮黄警示；剩余不足 **20%** 亮红告警。
 - **实时终端标题集成**：
   - 自动将终端窗口/标签页标题同步为 `<workspace>: <emoji> <state> [<task_count>]`（例如 `agy-cli-statusline: 🏃 working [2]`）。
-  - 支持 Agent 全生命周期状态 Emoji：`🚀 initializing`、`🤖 idle`、`🤔 thinking`、`🏃 working`、`🛠️ tool_use`。
+  - 支持 Agent 全生命周期状态 Emoji：`🚀 initializing`、`🤖 idle`、`🤔 thinking`、`🏃 working`、`🛠️ tool_use`、`👀 reviewing`、`🔐 authenticating`、`🔀 merging`、`🚨 error`。
 - **精准宽度自适应**：自动剥离 ANSI 转义颜色代码计算可见列宽，并兼容东亚宽字符，左右两端对齐分毫不差。
 - **免手动配置**：直接通过 `uvx` 运行，自动将脚本放入正确的目录并同步更新 `settings.json`。
 - **纯标准库实现**：脚本与安装工具均零外部依赖，极速执行。
