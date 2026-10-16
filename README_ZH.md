@@ -20,15 +20,22 @@
 - **实时终端标题集成**：
   - 自动将终端窗口/标签页标题同步为 `<workspace>: <emoji> <state> [<task_count>]`（例如 `agy-cli-statusline: 🏃 working [2]`）。
   - 支持 Agent 全生命周期状态 Emoji：`🚀 initializing`、`🤖 idle`、`🤔 thinking`、`🏃 working`、`🛠️ tool_use`、`👀 reviewing`、`🔐 authenticating`、`🔀 merging`、`🚨 error`。
+- **Antigravity GUI 桌面端 Hook 支持**：
+  - 自动检测 Antigravity 桌面 GUI 安装环境，并向 `~/.gemini/config/hooks.json` 自动配置全局 `PostInvocation` 生命周期钩子。
+  - 每一轮对话结束时，自动在回答下方追加**上下文占用**、**缓存命中率（Cache %）**、**当轮 Input/Output Token** 以及 **工具调用计数（`🛠️ Tools`）**。
 - **精准宽度自适应**：自动剥离 ANSI 转义颜色代码计算可见列宽，并兼容东亚宽字符，左右两端对齐分毫不差。
-- **免手动配置**：直接通过 `uvx` 运行，自动将脚本放入正确的目录并同步更新 `settings.json`。
+- **免手动配置**：直接通过 `uvx` 运行，自动将脚本放入正确的目录并同步更新 `settings.json` 与 `hooks.json`。
 - **纯标准库实现**：脚本与安装工具均零外部依赖，极速执行。
 
 ---
 
 ## 🖥️ 效果预览
 
+### Antigravity CLI 状态栏
 ![Statusline 效果预览](assets/status.png)
+
+### Antigravity GUI 桌面端钩子
+![GUI Hook 效果预览](assets/GUI_hook.png)
 
 ---
 
@@ -51,6 +58,7 @@ uvx --from . agy-cli-statusline
 > 运行后会自动完成：
 > 1. 拷贝 `statusline.py` 与 `title.py` 到 `~/.gemini/antigravity-cli/scripts/`
 > 2. 更新 `~/.gemini/antigravity-cli/settings.json` 中的 `statusLine` 与 `title` 配置项
+> 3. 检测 Antigravity 桌面 GUI 环境并自动配置 `~/.gemini/config/hooks.json` 与 `hook_status.py` 钩子脚本
 
 ### 2. 检查当前安装状态
 

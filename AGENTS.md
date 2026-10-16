@@ -11,6 +11,7 @@ It automatically copies and synchronizes custom `statusline.py` and `title.py` s
 - **Dynamic Theme Palette & Custom Colors**: Automatically adapts execution mode accent color to `colorScheme` (`tokyo night`, `solarized dark/light`, `light`, `dark`, `terminal`, `colorblind-friendly`), or user-defined `statusLine.themeColor` hex/name.
 - **Dynamic Warning Thresholds**: Context token usage escalates to bold yellow at $\ge 20\%$ and bold red at $\ge 50\%$; remaining quota drops to bold yellow at $\le 50\%$ and bold red at $\le 20\%$.
 - **Terminal Title Sync**: Real-time terminal title formatted as `<workspace>: <emoji> <state> [<task_count>]` across agent lifecycle states (`idle`, `working`, `tool_use`, `reviewing`, `initializing`, `authenticating`, `merging`, `error`).
+- **GUI Hook Integration**: Automatically detects Antigravity GUI / desktop installations and configures a global `PostInvocation` lifecycle hook in `~/.gemini/config/hooks.json` to append context token usage, cache hit rate, and tool call counts at the end of each turn.
 - **Precision Alignment**: Accurate visible column width calculation handling East Asian (CJK) characters and ANSI escape sequences.
 - **Zero Dependencies**: Pure Python standard library only. No external packages required at runtime or installation.
 
@@ -30,9 +31,10 @@ agy-cli-statusline/
 └── src/
     └── agy_cli_statusline/
         ├── __init__.py                # Package exports (main, cli_main, install, uninstall, status)
-        ├── installer.py               # CLI entrypoint, path resolution, settings.json updater
+        ├── installer.py               # CLI entrypoint, path resolution, settings.json & hooks.json updater
         ├── statusline.py              # Standalone statusline renderer (invoked via stdin JSON by agy)
-        └── title.py                   # Standalone terminal title updater (invoked via stdin JSON by agy)
+        ├── title.py                   # Standalone terminal title updater (invoked via stdin JSON by agy)
+        └── hook_status.py             # Standalone PostInvocation hook (invoked via stdin JSON by Antigravity GUI)
 ```
 
 ---
@@ -163,6 +165,56 @@ Both `statusline.py` and `title.py` are executed by `agy` via standard input pip
   - `merging` $\rightarrow$ `🔀`
   - `error` $\rightarrow$ `🚨`
   - `thinking` $\rightarrow$ `🤔` *(retained for compatibility)*
+
+### 4. `hook_status.py` (GUI PostInvocation Hook)
+- **Lifecycle Event**: Runs on `PostInvocation`, executed by Antigravity engine via stdin/stdout JSON protocol.
+- **Payload Schema & Contract**:
+  - Receives `{ "transcriptPath": "...", "modelName": "...", "conversationId": "..." }` on stdin.
+  - Returns `{ "injectSteps": [ { "systemMessage": { "systemMessage": "..." } } ] }` on stdout.
+- **Input Sanitization**:
+  - Strips UTF-8 BOM (`\ufeff`) on Windows stdin pipelines to prevent `JSONDecodeError`.
+- **Turn-End Filtering**:
+  - Inspects the latest `PLANNER_RESPONSE` in `transcript.jsonl`. If `tool_calls` are present, the model is still in an intermediate tool-invocation phase; returns `{}` immediately.
+  - Only generates a message when the model issues its final textual answer, ensuring exactly one summary badge per conversation turn.
+- **Metrics Calculated**:
+  - Current turn tool calls: Counts all tool executions between the latest user prompt (`USER_INPUT` with `source: USER_EXPLICIT`) and the final response.
+  - Prompt context & cache ratio: Extracts `input_tokens`, `cache_read_tokens`, and `output_tokens`.
+
+---
+
+## Technical Recipes & Exploration Guide (How to Find Data & Docs)
+
+When debugging or extending Antigravity integrations (CLI or GUI), follow these verified discovery techniques:
+
+### 1. How to Find Runtime Data & Metrics
+- **Transcript Logs (`transcript.jsonl`)**:
+  - Location: `<appDataDir>\brain\<conversation-id>\.system_generated\logs\transcript.jsonl`
+  - CLI conversation root: `~/.gemini/antigravity-cli/brain/`
+  - GUI conversation root: `~/.gemini/antigravity/brain/`
+  - Inspecting token metrics directly:
+    ```powershell
+    $env:PYTHONUTF8=1; uv run python -c "import json; [print(d.get('step_index'), d.get('type'), d.get('input_tokens'), d.get('cache_read_tokens')) for d in (json.loads(l) for l in open('transcript.jsonl', encoding='utf-8')) if d.get('type') == 'PLANNER_RESPONSE']"
+    ```
+- **CLI Runtime Payloads**:
+  - Enable debug in `settings.json`: `"statusLine": { "debug": true }` or set `$env:AGY_STATUSLINE_DEBUG=1`.
+  - Stored at: `~/.gemini/antigravity-cli/scripts/last_statusline_payload.json`.
+- **System Configuration Locations**:
+  - CLI settings: `~/.gemini/antigravity-cli/settings.json`
+  - Global Customization & Hooks: `~/.gemini/config/hooks.json`
+  - Workspace Customizations: `<project_root>/.agents/hooks.json`, `<project_root>/AGENTS.md`
+
+### 2. How to Discover Antigravity Docs & Customization Contracts
+- **Built-in Skill & Documentation Repository**:
+  - The local application bundles extensive markdown documentation under:
+    - Customizations overview: `~/.gemini/antigravity/builtin/skills/agy-customizations/SKILL.md`
+    - Lifecycle Hooks contract: `~/.gemini/antigravity/builtin/skills/agy-customizations/docs/hooks.md`
+    - Plugin specifications: `~/.gemini/antigravity/builtin/skills/agy-customizations/docs/plugins.md`
+    - Rules & System prompts: `~/.gemini/antigravity/builtin/skills/agy-customizations/docs/rules.md`
+    - MCP configuration: `~/.gemini/antigravity/builtin/skills/agy-customizations/docs/mcp_servers.md`
+- **Hook Output Contract Cheatsheet**:
+  - `systemMessage`: `{"injectSteps": [{"systemMessage": {"systemMessage": "..."}}]}` (rendered as collapsible item in GUI, persistent in history).
+  - `ephemeralMessage`: `{"injectSteps": [{"ephemeralMessage": "..."}]}` (transient prompt injection, discarded after current turn).
+  - `userMessage`: `{"injectSteps": [{"userMessage": "..."}]}` (simulates user prompt; caution: can cause agent feedback loops).
 
 ---
 

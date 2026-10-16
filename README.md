@@ -22,6 +22,9 @@ It automatically places the custom `statusline.py` and `title.py` scripts into y
 - **Real-Time Terminal Title Integration**:
   - Automatically formats the window/tab title as `<workspace>: <emoji> <state> [<task_count>]` (e.g. `agy-cli-statusline: 🏃 working [2]`).
   - Native agent lifecycle emojis: `🚀 initializing`, `🤖 idle`, `🤔 thinking`, `🏃 working`, `🛠️ tool_use`, `👀 reviewing`, `🔐 authenticating`, `🔀 merging`, `🚨 error`.
+- **GUI Desktop Hook Integration**:
+  - Automatically detects Antigravity GUI / desktop installations and configures a global `PostInvocation` lifecycle hook in `~/.gemini/config/hooks.json`.
+  - Automatically appends a turn-end diagnostic badge summarizing **Context Usage**, **Cache Read %**, **Input / Output Tokens**, and **Tool Call Counts (`🛠️ Tools`)** upon each completed turn.
 - **Accurate Display Width Calculation**: Automatically strips ANSI escape sequences before calculating layout width and handles East Asian Wide characters (e.g., CJK) seamlessly, guaranteeing pixel-perfect alignment.
 - **Zero Configuration & Zero Dependencies**: Built purely on the Python standard library. Runs instantly without downloading third-party pip packages.
 - **Effortless `uvx` Execution**: Run directly via `uvx` without manual wheel building or packaging.
@@ -30,7 +33,11 @@ It automatically places the custom `statusline.py` and `title.py` scripts into y
 
 ## 🖥️ Layout Preview
 
+### Antigravity CLI Statusline
 ![Statusline Preview](assets/status.png)
+
+### Antigravity GUI Desktop Hook
+![GUI Hook Preview](assets/GUI_hook.png)
 
 ---
 
@@ -53,6 +60,7 @@ uvx --from . agy-cli-statusline
 > **What it does:**
 > 1. Copies `statusline.py` and `title.py` scripts to `~/.gemini/antigravity-cli/scripts/`.
 > 2. Automatically updates both `statusLine` and `title` sections in `~/.gemini/antigravity-cli/settings.json`.
+> 3. Detects Antigravity GUI / desktop installations and configures the `PostInvocation` hook in `~/.gemini/config/hooks.json` with `hook_status.py`.
 
 ### 2. Check Installation Status
 
