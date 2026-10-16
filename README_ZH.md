@@ -26,6 +26,12 @@
 
 ---
 
+## 🖥️ 效果预览
+
+![Statusline 效果预览](assets/status.png)
+
+---
+
 ## 🚀 使用方法
 
 无需手动打包或构建 wheel，直接使用 `uvx` 运行即可：

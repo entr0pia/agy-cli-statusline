@@ -8,31 +8,31 @@ import struct
 import unicodedata
 from pathlib import Path
 
-# Ensure UTF-8 I/O on Windows
+# Ensure UTF-8 I/O on Windows without CRLF translation
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 if hasattr(sys.stdin, "reconfigure"):
     sys.stdin.reconfigure(encoding="utf-8")
 
-# ANSI Theme Colors
+# ANSI Theme Colors (Standard ECMA-48 Compliant Bold Sequences)
 COLOR_RESET = "\033[0m"
-COLOR_THEME_DEFAULT = "\033[1;96m"  # High-contrast Bright Cyan default (默认高亮青色)
-COLOR_NUM   = "\033[1;97m"          # High-contrast Bright White (数值常规高亮)
-COLOR_YELLOW = "\033[1;93m"         # High-contrast Bright Yellow (达到20% / 剩余50% 告警)
-COLOR_RED   = "\033[1;91m"          # High-contrast Bright Red (达到50% / 剩余20% 危险)
+COLOR_THEME_DEFAULT = "\033[1;36m"  # High-contrast Bright Cyan default (ECMA-48 Bold Cyan)
+COLOR_NUM   = "\033[1;37m"          # High-contrast Bright White (ECMA-48 Bold White)
+COLOR_YELLOW = "\033[1;33m"         # High-contrast Bright Yellow (ECMA-48 Bold Yellow)
+COLOR_RED   = "\033[1;31m"          # High-contrast Bright Red (ECMA-48 Bold Red)
 
 # Standard Named ANSI Colors (Bold)
 NAMED_ANSI_COLORS = {
-    "cyan": "\033[1;96m",
-    "blue": "\033[1;94m",
-    "purple": "\033[1;95m",
-    "magenta": "\033[1;95m",
-    "green": "\033[1;92m",
-    "yellow": "\033[1;93m",
-    "red": "\033[1;91m",
-    "white": "\033[1;97m",
-    "gray": "\033[1;90m",
-    "grey": "\033[1;90m",
+    "cyan": "\033[1;36m",
+    "blue": "\033[1;34m",
+    "purple": "\033[1;35m",
+    "magenta": "\033[1;35m",
+    "green": "\033[1;32m",
+    "yellow": "\033[1;33m",
+    "red": "\033[1;31m",
+    "white": "\033[1;37m",
+    "gray": "\033[1;30m",
+    "grey": "\033[1;30m",
 }
 
 # agy Official Theme Accent Palettes
@@ -136,7 +136,7 @@ def resolve_theme_color(payload=None, settings=None):
     return COLOR_THEME_DEFAULT
 
 
-ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+ANSI_ESCAPE_RE = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 EFFORT_RE = re.compile(r'\((low|medium|high|xhigh|max)\)', re.IGNORECASE)
 EFFORT_CLEAN_RE = re.compile(r'\s*\((low|medium|high|xhigh|max)\)', re.IGNORECASE)
 
@@ -213,8 +213,14 @@ def get_terminal_width(payload=None):
         pass
 
     try:
-        with open("CONOUT$", "w") as f:
+        with open("CONOUT$", "r") as f:
             return os.get_terminal_size(f.fileno()).columns
+    except Exception:
+        pass
+
+    try:
+        import shutil
+        return shutil.get_terminal_size((80, 20)).columns
     except Exception:
         pass
 
@@ -233,7 +239,7 @@ def get_display_width(text):
     for ch in clean_text:
         if ord(ch) < 128:
             width += 1
-        elif unicodedata.east_asian_width(ch) in ('F', 'W'):
+        elif unicodedata.east_asian_width(ch) in ('F', 'W', 'A'):
             width += 2
         else:
             width += 1
@@ -419,7 +425,18 @@ def main():
 
         payload = {}
         if raw_input:
-            payload = json.loads(raw_input)
+            clean_input = ANSI_ESCAPE_RE.sub('', raw_input).strip()
+            start_idx = clean_input.find('{')
+            end_idx = clean_input.rfind('}')
+            if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+                clean_input = clean_input[start_idx:end_idx + 1]
+            try:
+                payload = json.loads(clean_input)
+            except Exception:
+                try:
+                    payload = json.loads(raw_input)
+                except Exception:
+                    payload = {}
 
         ctx = payload.get("context_window", {})
         tokens = ctx.get("total_input_tokens") or ctx.get("input_tokens") or 0
@@ -460,23 +477,57 @@ def main():
         mode = extract_execution_mode(payload, settings)
         theme_color = resolve_theme_color(payload, settings)
         left_text = f"{theme_color}[{mode}]{COLOR_RESET}" if mode else ""
+        left_width = get_display_width(left_text) if left_text else 0
 
         term_width = get_terminal_width(payload)
         right_width = get_display_width(right_text)
 
+        # Reserve 1 column for terminal safety margin (VT auto-margin / line wrap protection)
+        safety_margin = 1
+        max_avail = max(20, term_width - safety_margin)
+
+        # Multi-tiered layout to strictly guarantee no terminal wrapping or ANSI truncation
+        def fit_right_content(avail):
+            # 1. Full right text
+            if right_width <= avail:
+                pad = max(0, avail - right_width)
+                return " " * pad + right_text
+            # 2. Drop Quota
+            compact_parts = [p for p in parts if not p.startswith("Quota:")]
+            compact_right = " | ".join(compact_parts)
+            compact_width = get_display_width(compact_right)
+            if compact_width <= avail:
+                pad = max(0, avail - compact_width)
+                return " " * pad + compact_right
+            # 3. Drop Model name, keep Context token status
+            ctx_width = get_display_width(token_str)
+            if ctx_width <= avail:
+                pad = max(0, avail - ctx_width)
+                return " " * pad + token_str
+            # 4. Ultra compact (just numbers)
+            tok_num_str = format_tokens(tokens)
+            short_str = f"Ctx:{COLOR_NUM}{tok_num_str}{COLOR_RESET}"
+            short_w = get_display_width(short_str)
+            pad = max(0, avail - short_w)
+            return " " * pad + short_str
+
         if left_text:
-            left_width = get_display_width(left_text)
-            gap = term_width - left_width - right_width - 1
-            if gap >= 1:
-                print(f"{left_text}{' ' * gap}{right_text}")
+            gap = max_avail - left_width - right_width
+            if gap >= 2:
+                final_line = f"{left_text}{' ' * gap}{right_text}"
             else:
                 combined = f"{left_text} | {right_text}"
                 combined_width = get_display_width(combined)
-                padding = max(0, term_width - combined_width - 1)
-                print(" " * padding + combined)
+                if combined_width <= max_avail:
+                    padding = max(0, max_avail - combined_width)
+                    final_line = " " * padding + combined
+                else:
+                    final_line = fit_right_content(max_avail)
         else:
-            padding = max(0, term_width - right_width - 1)
-            print(" " * padding + right_text)
+            final_line = fit_right_content(max_avail)
+
+        sys.stdout.write(final_line)
+        sys.stdout.flush()
 
     except Exception:
         pass

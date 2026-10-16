@@ -1,6 +1,6 @@
 [project]
 name = "agy-cli-statusline"
-version = "0.1.6"
+version = "0.1.7"
 
 description = "One-click installer and statusline/title manager for Google Antigravity CLI (agy)"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = []
 agy-cli-statusline = "agy_cli_statusline:main"
 
 [build-system]
-requires = ["uv_build>=0.12.0,<0.13.0"]
+requires = ["uv_build>=0.12.0,<0.14.0"]
 build-backend = "uv_build"
 
 

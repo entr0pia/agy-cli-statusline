@@ -6,7 +6,7 @@ import json
 if hasattr(sys.stdin, "reconfigure"):
     sys.stdin.reconfigure(encoding="utf-8-sig")
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 
 STATE_EMOJIS = {
     "idle": "🤖",
@@ -28,8 +28,13 @@ def main() -> None:
             sys.stdout.write("unknown: 😴 idle\n")
             return
 
-        # 2. 解析 JSON 数据
-        data = json.loads(raw_text)
+        # 2. 解析 JSON 数据（支持剥离边界杂质）
+        start_idx = raw_text.find('{')
+        end_idx = raw_text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+            data = json.loads(raw_text[start_idx:end_idx + 1])
+        else:
+            data = json.loads(raw_text)
         agent_state = data.get("agent_state") or "idle"
 
         # 3. 极速路径名提取：纯切片操作替代 os.path.normpath，避免重度正则与系统调用

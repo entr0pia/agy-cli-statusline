@@ -30,15 +30,7 @@ It automatically places the custom `statusline.py` and `title.py` scripts into y
 
 ## 🖥️ Layout Preview
 
-**Active Execution Mode (Bilateral layout):**
-```text
-[Accept-Edits]                                      [Gemini 3.8 Flash · High] | Context: 100.0k (10.0%) | Quota: 80.00%
-```
-
-**Unmatched / Default Mode (Clean right-aligned layout):**
-```text
-                                                    [Gemini 3.8 Flash · High] | Context: 100.0k (10.0%) | Quota: 80.00%
-```
+![Statusline Preview](assets/status.png)
 
 ---
 
