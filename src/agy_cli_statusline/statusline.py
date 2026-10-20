@@ -143,6 +143,100 @@ EFFORT_CLEAN_RE = re.compile(r'\s*\((low|medium|high|xhigh|max)\)', re.IGNORECAS
 _cached_settings = None
 
 
+def parse_varint(data: bytes, offset: int):
+    res = 0
+    shift = 0
+    while offset < len(data):
+        b = data[offset]
+        offset += 1
+        res |= (b & 0x7F) << shift
+        if not (b & 0x80):
+            break
+        shift += 7
+    return res, offset
+
+
+def extract_actual_model_from_blob(data: bytes) -> str | None:
+    if not data:
+        return None
+    offset = 0
+    field1_bytes = None
+    while offset < len(data):
+        tag, offset = parse_varint(data, offset)
+        wire_type = tag & 7
+        field_num = tag >> 3
+        if wire_type == 0:
+            while offset < len(data) and (data[offset] & 0x80):
+                offset += 1
+            offset = min(offset + 1, len(data))
+        elif wire_type == 2:
+            length, offset = parse_varint(data, offset)
+            if field_num == 1:
+                field1_bytes = data[offset : offset + length]
+                break
+            offset += length
+        elif wire_type == 1:
+            offset += 8
+        elif wire_type == 5:
+            offset += 4
+        else:
+            break
+
+    if not field1_bytes:
+        return None
+
+    offset = 0
+    while offset < len(field1_bytes):
+        tag, offset = parse_varint(field1_bytes, offset)
+        wire_type = tag & 7
+        field_num = tag >> 3
+        if wire_type == 0:
+            while offset < len(field1_bytes) and (field1_bytes[offset] & 0x80):
+                offset += 1
+            offset = min(offset + 1, len(field1_bytes))
+        elif wire_type == 2:
+            length, offset = parse_varint(field1_bytes, offset)
+            if field_num == 19:
+                try:
+                    return field1_bytes[offset : offset + length].decode("utf-8")
+                except Exception:
+                    return None
+            offset += length
+        elif wire_type == 1:
+            offset += 8
+        elif wire_type == 5:
+            offset += 4
+        else:
+            break
+    return None
+
+
+def get_actual_model_for_session(conversation_id: str | None) -> str | None:
+    if not conversation_id:
+        return None
+    import sqlite3
+    roots = [
+        Path.home() / ".gemini" / "antigravity" / "conversations",
+        Path.home() / ".gemini" / "antigravity-cli" / "conversations",
+    ]
+    for r in roots:
+        db_path = r / f"{conversation_id}.db"
+        if db_path.exists():
+            try:
+                conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+                cur = conn.cursor()
+                cur.execute("SELECT data FROM gen_metadata ORDER BY idx DESC LIMIT 1;")
+                row = cur.fetchone()
+                conn.close()
+                if row and row[0]:
+                    model = extract_actual_model_from_blob(row[0])
+                    if model:
+                        return model
+            except Exception:
+                pass
+    return None
+
+
 def get_settings():
     """Retrieve and cache settings.json contents for the current invocation."""
     global _cached_settings
@@ -456,9 +550,22 @@ def main():
 
         effort = extract_effort(payload, raw_model, settings)
 
-        cleaned_model = EFFORT_CLEAN_RE.sub('', raw_model).strip()
-        if not cleaned_model:
-            cleaned_model = "Gemini 3.8 Flash"
+        conversation_id = payload.get("conversation_id") or payload.get("session_id")
+        if not conversation_id:
+            tp = payload.get("transcript_path") or payload.get("transcriptPath")
+            if tp:
+                try:
+                    conversation_id = Path(tp).parent.parent.parent.name
+                except Exception:
+                    pass
+
+        actual_model = get_actual_model_for_session(conversation_id)
+        if actual_model:
+            cleaned_model = actual_model
+        else:
+            cleaned_model = EFFORT_CLEAN_RE.sub('', raw_model).strip()
+            if not cleaned_model:
+                cleaned_model = "Gemini 3.8 Flash"
 
         parts = []
         if effort:
