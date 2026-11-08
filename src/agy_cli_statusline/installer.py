@@ -112,7 +112,12 @@ def read_source_hook() -> str:
         return fallback.read_text(encoding="utf-8")
 
 
-def install(agy_dir: Path | None = None, dry_run: bool = False, debug: bool | None = None) -> bool:
+def install(
+    agy_dir: Path | None = None,
+    dry_run: bool = False,
+    debug: bool | None = None,
+    install_gui_hook: bool = False,
+) -> bool:
     """Install statusline and title scripts and initialize settings.json configuration."""
     base = agy_dir or get_agy_dir()
     target_statusline = get_target_script_path(base)
@@ -191,58 +196,59 @@ def install(agy_dir: Path | None = None, dry_run: bool = False, debug: bool | No
         print(f"    statusLine.command: {statusline_command}")
         print(f"    title.command:      {title_command}")
 
-    # 3. Detect and configure GUI Hook (if GUI environment detected)
-    gui_present = is_gui_installed()
-    if gui_present:
-        target_hook = get_target_hook_script_path()
-        hooks_file = get_hooks_json_path()
-        hook_content = read_source_hook()
+    # 3. Detect and configure GUI Hook (opt-in via install_gui_hook)
+    if install_gui_hook:
+        gui_present = is_gui_installed()
+        if gui_present:
+            target_hook = get_target_hook_script_path()
+            hooks_file = get_hooks_json_path()
+            hook_content = read_source_hook()
 
-        print(f"\n[*] Antigravity GUI detected. Configuring PostInvocation hook...")
-        if dry_run:
-            print(f"[dry-run] Would write hook script to: {target_hook}")
+            print(f"\n[*] Antigravity GUI detected. Configuring PostInvocation hook...")
+            if dry_run:
+                print(f"[dry-run] Would write hook script to: {target_hook}")
+            else:
+                target_hook.parent.mkdir(parents=True, exist_ok=True)
+                target_hook.write_text(hook_content, encoding="utf-8")
+                print(f"[✓] Hook script placed: {target_hook}")
+
+            # Update ~/.gemini/config/hooks.json
+            hooks_data: dict = {}
+            if hooks_file.exists():
+                try:
+                    with open(hooks_file, "r", encoding="utf-8") as f:
+                        hooks_data = json.load(f)
+                except Exception as e:
+                    print(f"[!] Failed to parse existing hooks.json ({e}), creating backup...")
+                    if not dry_run:
+                        bak = hooks_file.with_suffix(".json.bak")
+                        shutil.copy2(hooks_file, bak)
+                        print(f"[✓] Backup created at: {bak}")
+                    hooks_data = {}
+
+            hook_command = get_python_command(target_hook)
+            hooks_data["context-status-appender"] = {
+                "enabled": True,
+                "PostInvocation": [
+                    {
+                        "type": "command",
+                        "command": hook_command,
+                        "timeout": 10,
+                    }
+                ],
+            }
+
+            if dry_run:
+                print(f"[dry-run] Would update {hooks_file}: context-status-appender -> {hook_command}")
+            else:
+                hooks_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(hooks_file, "w", encoding="utf-8") as f:
+                    json.dump(hooks_data, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
+                print(f"[✓] GUI Hooks updated: {hooks_file}")
+                print(f"    context-status-appender: {hook_command}")
         else:
-            target_hook.parent.mkdir(parents=True, exist_ok=True)
-            target_hook.write_text(hook_content, encoding="utf-8")
-            print(f"[✓] Hook script placed: {target_hook}")
-
-        # Update ~/.gemini/config/hooks.json
-        hooks_data: dict = {}
-        if hooks_file.exists():
-            try:
-                with open(hooks_file, "r", encoding="utf-8") as f:
-                    hooks_data = json.load(f)
-            except Exception as e:
-                print(f"[!] Failed to parse existing hooks.json ({e}), creating backup...")
-                if not dry_run:
-                    bak = hooks_file.with_suffix(".json.bak")
-                    shutil.copy2(hooks_file, bak)
-                    print(f"[✓] Backup created at: {bak}")
-                hooks_data = {}
-
-        hook_command = get_python_command(target_hook)
-        hooks_data["context-status-appender"] = {
-            "enabled": True,
-            "PostInvocation": [
-                {
-                    "type": "command",
-                    "command": hook_command,
-                    "timeout": 10,
-                }
-            ],
-        }
-
-        if dry_run:
-            print(f"[dry-run] Would update {hooks_file}: context-status-appender -> {hook_command}")
-        else:
-            hooks_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(hooks_file, "w", encoding="utf-8") as f:
-                json.dump(hooks_data, f, indent=2, ensure_ascii=False)
-                f.write("\n")
-            print(f"[✓] GUI Hooks updated: {hooks_file}")
-            print(f"    context-status-appender: {hook_command}")
-    else:
-        print("\n[-] Antigravity GUI environment not detected, skipping GUI hook setup.")
+            print("\n[-] Antigravity GUI environment not detected, skipping GUI hook setup.")
 
     print("\n🎉 Installation completed successfully! Restart agy or GUI to take effect.")
     return True
@@ -404,6 +410,12 @@ def cli_main() -> None:
         default=None,
         help="Enable/disable debug recording of statusline payload (default: False)",
     )
+    install_parser.add_argument(
+        "--gui-hook",
+        action="store_true",
+        default=False,
+        help="Optional: also install GUI PostInvocation hook in ~/.gemini/config/hooks.json (default: False)",
+    )
 
     # uninstall subcommand
     uninstall_parser = subparsers.add_parser(
@@ -426,6 +438,12 @@ def cli_main() -> None:
     )
     parser.add_argument("--status", action="store_true", help="Check statusline, title, and GUI hook status")
     parser.add_argument("--uninstall", action="store_true", help="Remove statusline, title, and GUI hook configuration")
+    parser.add_argument(
+        "--gui-hook",
+        action="store_true",
+        default=False,
+        help="Optional: also install GUI PostInvocation hook in ~/.gemini/config/hooks.json (default: False)",
+    )
 
     args = parser.parse_args()
 
@@ -435,5 +453,5 @@ def cli_main() -> None:
         keep_script = getattr(args, "keep_script", False)
         uninstall(remove_script=not keep_script, dry_run=args.dry_run)
     else:
-        install(dry_run=args.dry_run, debug=args.debug)
+        install(dry_run=args.dry_run, debug=args.debug, install_gui_hook=getattr(args, "gui_hook", False))
 

@@ -11,7 +11,7 @@ It automatically copies and synchronizes custom `statusline.py` and `title.py` s
 - **Dynamic Theme Palette & Custom Colors**: Automatically adapts execution mode accent color to `colorScheme` (`tokyo night`, `solarized dark/light`, `light`, `dark`, `terminal`, `colorblind-friendly`), or user-defined `statusLine.themeColor` hex/name.
 - **Dynamic Warning Thresholds**: Context token usage escalates to bold yellow at $\ge 20\%$ and bold red at $\ge 50\%$; remaining quota drops to bold yellow at $\le 50\%$ and bold red at $\le 20\%$.
 - **Terminal Title Sync**: Real-time terminal title formatted as `<workspace>: <emoji> <state> [<task_count>]` across agent lifecycle states (`idle`, `working`, `tool_use`, `reviewing`, `initializing`, `authenticating`, `merging`, `error`).
-- **GUI Hook Integration**: Automatically detects Antigravity GUI / desktop installations and configures a global `PostInvocation` lifecycle hook in `~/.gemini/config/hooks.json` to append context token usage, cache hit rate, and tool call counts at the end of each turn.
+- **GUI Hook Integration (Optional)**: Provides a global `PostInvocation` lifecycle hook in `~/.gemini/config/hooks.json` to append context token usage, cache hit rate, and tool call counts at the end of each turn. Disabled by default, opt-in via `--gui-hook`.
 - **Precision Alignment**: Accurate visible column width calculation handling East Asian (CJK) characters and ANSI escape sequences.
 - **Zero Dependencies**: Pure Python standard library only. No external packages required at runtime or installation.
 
@@ -69,9 +69,13 @@ All operations can be executed via `uv run agy-cli-statusline` or via `uvx --fro
   ```powershell
   uv run agy-cli-statusline install --dry-run
   ```
-- **Install / Update (Live)**:
+- **Install / Update (Live, CLI only default)**:
   ```powershell
   uv run agy-cli-statusline install
+  ```
+- **Install with GUI Hook Enabled**:
+  ```powershell
+  uv run agy-cli-statusline install --gui-hook
   ```
 - **Install with Debug Logging Enabled**:
   ```powershell

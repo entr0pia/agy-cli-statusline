@@ -404,11 +404,23 @@ def select_quota_bucket(quota_dict, model_name):
         return None
 
     model_lower = (model_name or "").lower()
+    is_argon = "argon" in model_lower
     is_gemini = "gemini" in model_lower
     is_3p = any(k in model_lower for k in ["claude", "opus", "sonnet", "gpt", "openai"])
 
     # Match prioritized quota buckets according to model family
-    if is_gemini:
+    if is_argon:
+        candidates = [
+            "gemini-argon-wtu-weekly",
+            "gemini-argon-weekly",
+            "gemini-argon-wtu",
+            "argon-wtu-weekly",
+            "argon-weekly",
+            "argon",
+            "gemini-weekly",
+            "gemini-5h",
+        ]
+    elif is_gemini:
         candidates = ["gemini-5h", "gemini", "gemini-weekly"]
     elif is_3p:
         candidates = ["3p-5h", "3p", "3p-weekly", "claude-5h", "claude"]
@@ -419,7 +431,15 @@ def select_quota_bucket(quota_dict, model_name):
         if key in quota_dict and isinstance(quota_dict[key], dict):
             return quota_dict[key]
 
-    # Fuzzy match with "5h" prioritized for sliding window
+    # Fuzzy match with priority according to model type
+    if is_argon:
+        for k, v in quota_dict.items():
+            if isinstance(v, dict) and "argon" in k.lower():
+                return v
+        for k, v in quota_dict.items():
+            if isinstance(v, dict) and "weekly" in k.lower():
+                return v
+
     for k, v in quota_dict.items():
         if isinstance(v, dict) and "5h" in k:
             return v
@@ -506,16 +526,15 @@ def main():
         raw_input = sys.stdin.read().strip()
         settings = get_settings()
 
-        # Debug record: only write when debug is explicitly enabled
-        if is_debug_enabled(settings):
-            try:
-                env_dir = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.environ.get("AGY_CONFIG_DIR")
-                base = Path(env_dir) if env_dir else Path.home() / ".gemini" / "antigravity-cli"
-                dbg_file = base / "last_statusline_payload.json"
-                with open(dbg_file, "w", encoding="utf-8") as f:
-                    f.write(raw_input)
-            except Exception:
-                pass
+        # Record raw payload unconditionally for diagnostics
+        try:
+            env_dir = os.environ.get("ANTIGRAVITY_CONFIG_DIR") or os.environ.get("AGY_CONFIG_DIR")
+            base = Path(env_dir) if env_dir else Path.home() / ".gemini" / "antigravity-cli"
+            dbg_file = base / "last_statusline_payload.json"
+            with open(dbg_file, "w", encoding="utf-8") as f:
+                f.write(raw_input)
+        except Exception:
+            pass
 
         payload = {}
         if raw_input:
@@ -576,7 +595,7 @@ def main():
         token_str = format_context(tokens, pct)
         parts.append(token_str)
 
-        quota_str = extract_quota(payload, raw_model)
+        quota_str = extract_quota(payload, cleaned_model or raw_model)
         if quota_str:
             parts.append(quota_str)
 
